@@ -252,9 +252,10 @@ void print_metadata(struct fmt *chk)
 
 int main(int argc, char **argv)
 {
-	if (argc < 2)
+	if (argc < 2) {
+		fprintf(stderr, "USAGE: wav <input.wav>\n");
 		return 1;
-
+	}
 	FILE *fp = fopen(argv[1], "rb");
 	if (fp == NULL) {
 		fprintf(stderr, "Could not open file\n");
