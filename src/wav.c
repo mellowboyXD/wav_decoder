@@ -1,3 +1,4 @@
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -240,18 +241,33 @@ struct data *unpack_data(FILE *fp)
 	return subchunk;
 }
 
-void print_metadata(struct fmt *chk)
+void print_metadata(struct fmt *subchunk1, struct data *subchunk2)
 {
-	printf("BitsPerSample: %i\n", chk->bits_per_sample);
-	printf("SampleRate: %i\n", chk->sample_rate);
-	printf("NumberOfChannels: %i\n", chk->nchannels);
-	printf("ByteRate: %i\n", chk->byte_rate);
-	printf("BlockAlign: %i\n", chk->blk_align);
-	printf("Format(PCM=1, IEEE FLOAT=3): %i\n", chk->fmt);
+	printf("BitsPerSample: %i\n", subchunk1->bits_per_sample);
+	printf("SampleRate: %i\n", subchunk1->sample_rate);
+	printf("NumberOfChannels: %i\n", subchunk1->nchannels);
+	printf("ByteRate: %i\n", subchunk1->byte_rate);
+	printf("BlockAlign: %i\n", subchunk1->blk_align);
+	printf("Format(PCM=1, IEEE FLOAT=3): %i\n", subchunk1->fmt);
+	printf("Duration: %.02fs\n",
+	       (double)subchunk2->size / (double)subchunk1->byte_rate);
+}
+
+snd_pcm_t *handle;
+void cleanup(int __signum)
+{
+	(void)__signum;
+	if (handle) {
+		snd_pcm_drop(handle);
+		snd_pcm_prepare(handle);
+	}
+	printf("\nCredits: mellowboyXD\n");
+	exit(0);
 }
 
 int main(int argc, char **argv)
 {
+	signal(SIGINT, cleanup);
 	if (argc < 2) {
 		fprintf(stderr, "USAGE: wav <input.wav>\n");
 		return 1;
@@ -273,12 +289,9 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	print_metadata(subchunk1);
-	printf("Duration: %.02fs\n",
-	       (double)subchunk2->size / (double)subchunk1->byte_rate);
+	print_metadata(subchunk1, subchunk2);
 
 	// Play sound through alsa-lib
-	snd_pcm_t *handle;
 	snd_pcm_sframes_t frames;
 	int err;
 
@@ -315,10 +328,12 @@ int main(int argc, char **argv)
 		format = SND_PCM_FORMAT_FLOAT_LE;
 	}
 
+	snd_pcm_prepare(handle);
+
 	if ((err = snd_pcm_set_params(
 		     handle, format, SND_PCM_ACCESS_RW_INTERLEAVED,
 		     subchunk1->nchannels, subchunk1->sample_rate, 1,
-		     100 * 1000)) < 0) {
+		     10 * 1000)) < 0) {
 		fprintf(stderr, "Playback open error: %s.\n",
 			snd_strerror(err));
 		goto free_resources;
