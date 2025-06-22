@@ -22,7 +22,7 @@
     - little-endian stores the lest significant byte (LSB) first
     - big-endian stores the most signoficant byte (MSB) first
 
-<img src="./32bit-Endianess.png" alt="Diagram demostrating big- vs little-endianness">
+<img src="./img/32bit-Endianess.png" alt="Diagram demostrating big- vs little-endianness">
 
 ### Decoding Wav File
 
@@ -33,6 +33,8 @@
 - check file size
 - validate number of channels
 - check fmt chunk
+
+<img src="./img/wav_header.png" alt="Image of the WAV file format header">
 
 [^1] A bit stream is a sequence of bits.
 [^2] endianness is the order in which bytes within a word of digital data are transmitted over a data communication medium or addressed (by rising addresses) in computer memory, counting only byte significance compared to earliness.
