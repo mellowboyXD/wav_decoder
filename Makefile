@@ -2,8 +2,11 @@ SRC=./src/wav.c
 
 all: run
 
-build:
-	gcc -Wall -Wextra -ggdb -o wav $(SRC)
+build: $(SRC)
+	gcc -Wall -Wextra -ggdb -o wav $(SRC) -lasound
 
 run: build
 	./wav sounds/cosmic.wav
+
+clean: build
+	rm wav

@@ -1,11 +1,9 @@
-#include <asm-generic/errno-base.h>
-#include <asm-generic/errno.h>
-#include <errno.h>
-#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <alsa/asoundlib.h>
 
 #define BLOC_SIZE 44
 #define FMT_CHUNKSIZE 24
@@ -35,7 +33,6 @@ struct descriptor *unpack_desc(FILE *fp)
 	}
 
 	if (strncmp((const char *)chunk->id, "RIFF", 4) != 0) {
-		errno = EPERM;
 		fprintf(stderr, "Not a WAV file (no RIFF header).\n");
 		exit(EXIT_FAILURE);
 	}
@@ -48,7 +45,6 @@ struct descriptor *unpack_desc(FILE *fp)
 	}
 
 	if (chunk->size + 8 <= BLOC_SIZE) {
-		errno = EPERM;
 		fprintf(stderr,
 			"Not a valid WAV file. Chunk size is too small\n");
 		exit(EXIT_FAILURE);
@@ -62,7 +58,6 @@ struct descriptor *unpack_desc(FILE *fp)
 	}
 
 	if (strncmp((const char *)chunk->fmt, "WAVE", 4) != 0) {
-		errno = EPERM;
 		fprintf(stderr, "RIFF file is not a WAV format.\n");
 		exit(EXIT_FAILURE);
 	}
@@ -84,7 +79,7 @@ struct fmt {
 	uint16_t nchannels; // 2 bytes
 	uint32_t sample_rate; // 4 bytes
 	uint32_t byte_rate; // 4 bytes (SampleRate * BitsPerSample * channels) / 8
-	uint16_t blk_align; // 2 bytes (BitsPerSample * Channels) / 8
+	uint16_t blk_align; // 2 bytes (BitsPerSample * Channels) / 8 (Frames)
 	uint16_t bits_per_sample; // 2 bytes
 };
 
@@ -105,7 +100,6 @@ struct fmt *unpack_fmt(FILE *fp)
 	}
 
 	if (strncmp((const char *)subchunk->id, "fmt ", 4) != 0) {
-		errno = EPERM;
 		fprintf(stderr, "Invalid WAV. No `fmt` subchunk id.\n");
 		exit(EXIT_FAILURE);
 	}
@@ -246,6 +240,16 @@ struct data *unpack_data(FILE *fp)
 	return subchunk;
 }
 
+void print_metadata(struct fmt *chk)
+{
+	printf("BitsPerSample: %i\n", chk->bits_per_sample);
+	printf("SampleRate: %i\n", chk->sample_rate);
+	printf("NumberOfChannels: %i\n", chk->nchannels);
+	printf("ByteRate: %i\n", chk->byte_rate);
+	printf("BlockAlign: %i\n", chk->blk_align);
+	printf("Format(PCM=1, IEEE FLOAT=3): %i\n", chk->fmt);
+}
+
 int main(int argc, char **argv)
 {
 	if (argc < 2)
@@ -268,6 +272,79 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	print_metadata(subchunk1);
+	printf("Duration: %.02fs\n",
+	       (double)subchunk2->size / (double)subchunk1->byte_rate);
+
+	// Play sound through alsa-lib
+	snd_pcm_t *handle;
+	snd_pcm_sframes_t frames;
+	int err;
+
+	if ((err = snd_pcm_open(&handle, "default", SND_PCM_STREAM_PLAYBACK,
+				0)) < 0) {
+		fprintf(stderr, "Playback open error: %s.\n",
+			snd_strerror(err));
+		goto free_resources;
+	}
+
+	int format;
+	if (subchunk1->fmt == WAVE_FORMAT_PCM) {
+		switch (subchunk1->bits_per_sample) {
+		case 8:
+			format = SND_PCM_FORMAT_U8;
+			break;
+		case 16:
+			format = SND_PCM_FORMAT_S16_LE;
+			break;
+		case 24:
+			if (3 * subchunk1->nchannels == subchunk1->blk_align)
+				format = SND_PCM_FORMAT_S24_3LE;
+			else
+				format = SND_PCM_FORMAT_S24_LE;
+			break;
+		case 32:
+			format = SND_PCM_FORMAT_S32_LE;
+			break;
+		default:
+			fprintf(stderr, "Unsupported bit depth\n");
+			exit(EXIT_FAILURE);
+		}
+	} else {
+		format = SND_PCM_FORMAT_FLOAT_LE;
+	}
+
+	if ((err = snd_pcm_set_params(
+		     handle, format, SND_PCM_ACCESS_RW_INTERLEAVED,
+		     subchunk1->nchannels, subchunk1->sample_rate, 1,
+		     100 * 1000)) < 0) {
+		fprintf(stderr, "Playback open error: %s.\n",
+			snd_strerror(err));
+		goto free_resources;
+	}
+
+	long int framesCount = subchunk2->size / subchunk1->blk_align;
+	frames = snd_pcm_writei(handle, subchunk2->stream, framesCount);
+
+	if (frames < 0)
+		frames = snd_pcm_recover(handle, frames, 0);
+	if (frames < 0) {
+		fprintf(stderr, "snd_pcm_writei failed: %s\n",
+			snd_strerror(frames));
+		goto free_resources;
+	}
+
+	if (frames > 0 && frames < framesCount)
+		fprintf(stderr, "Short write: expected %li wrote %li\n",
+			framesCount, frames);
+
+	err = snd_pcm_drain(handle);
+	if (err < 0)
+		fprintf(stderr, "snd_pcm_drain failed: %s\n",
+			snd_strerror(err));
+
+	snd_pcm_close(handle);
+free_resources:
 	free(chunk);
 	free(subchunk1);
 	free(subchunk2->stream);

@@ -38,6 +38,10 @@
 
 - wav file header is always *44 bytes* long
 
+### PCM Audio Stream
+
+Pulse-code modulation (PCM) is a method used to digitally represent analog signals. It is the standard form of digital audio in computers, compact discs, digital telephony and other digital audio applications.
+
 [^1] A bit stream is a sequence of bits.
 [^2] endianness is the order in which bytes within a word of digital data are transmitted over a data communication medium or addressed (by rising addresses) in computer memory, counting only byte significance compared to earliness.
 
