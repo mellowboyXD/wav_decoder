@@ -1,5 +1,16 @@
 # Wav Decoder
 
+A simple WAVE file decoder that decodes the wave file and passes the raw PCM data to the underlying sound cards using the alsa-lib library.
+Tested on Fedora Linux 42
+
+## How to run?
+
+```shell
+make
+./wav <input.wav>
+```
+
+# Notes
 ## How is sound played on linux?
 
 - analog sounds are vibrations of air particles forming waves
