@@ -59,7 +59,11 @@ Pulse-code modulation (PCM) is a method used to digitally represent analog signa
 
 ## Reference List
 http://soundfile.sapp.org/doc/WaveFormat/
+
 https://en.wikipedia.org/wiki/WAV
+
 https://github.com/chdh/wav-file-decoder/tree/main
+
 https://docs.fileformat.com/audio/wav/
+
 https://www.freesounds.org/
