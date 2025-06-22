@@ -36,6 +36,8 @@
 
 <img src="./img/wav_header.png" alt="Image of the WAV file format header">
 
+- wav file header is always *44 bytes* long
+
 [^1] A bit stream is a sequence of bits.
 [^2] endianness is the order in which bytes within a word of digital data are transmitted over a data communication medium or addressed (by rising addresses) in computer memory, counting only byte significance compared to earliness.
 
