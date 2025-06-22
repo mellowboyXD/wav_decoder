@@ -1,4 +1,6 @@
+#include <asm-generic/errno-base.h>
 #include <asm-generic/errno.h>
+#include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -21,45 +23,48 @@ struct descriptor *unpack_desc(FILE *fp)
 	struct descriptor *chunk = malloc(sizeof(struct descriptor));
 
 	if (chunk == NULL) {
-		perror("Could not allocate memory.\n");
-		exit(1);
+		fprintf(stderr, "Could not allocate memory.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	// Read chunkID
 	ret = fread(chunk->id, 1, 4, fp);
 	if (ret != 4) {
 		fprintf(stderr, "Error reading: %zu\n", ret);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	if (strncmp((const char *)chunk->id, "RIFF", 4) != 0) {
-		perror("Not a WAV file (no RIFF header).\n");
-		exit(1);
+		errno = EPERM;
+		fprintf(stderr, "Not a WAV file (no RIFF header).\n");
+		exit(EXIT_FAILURE);
 	}
 
 	// Read file size - 8 (little-endian)
 	ret = fread(&chunk->size, sizeof(chunk->size), 1, fp);
 	if (ret != 1) {
-		perror("Error reading chunk size\n");
-		exit(1);
+		fprintf(stderr, "Error reading chunk size\n");
+		exit(EXIT_FAILURE);
 	}
 
 	if (chunk->size + 8 <= BLOC_SIZE) {
-		perror("Not a valid WAV file\n");
-		exit(1);
+		errno = EPERM;
+		fprintf(stderr,
+			"Not a valid WAV file. Chunk size is too small\n");
+		exit(EXIT_FAILURE);
 	}
-	chunk->size += 8;
 
 	// Read file format
 	ret = fread(chunk->fmt, 1, 4, fp);
 	if (ret != 4) {
 		fprintf(stderr, "Error reading format: %zu\n", ret);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	if (strncmp((const char *)chunk->fmt, "WAVE", 4) != 0) {
-		perror("RIFF file is not a WAV format.\n");
-		exit(1);
+		errno = EPERM;
+		fprintf(stderr, "RIFF file is not a WAV format.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	return chunk;
@@ -73,8 +78,8 @@ struct descriptor *unpack_desc(FILE *fp)
 
 struct fmt {
 	// 24 bytes long
-	uint8_t id[4]; // 4 bytes
-	uint32_t size; // 4 bytes
+	uint8_t id[4]; // 4 bytes FormatBlocID
+	uint32_t size; // 4 bytes BlocSize
 	uint16_t fmt; // 2 bytes
 	uint16_t nchannels; // 2 bytes
 	uint32_t sample_rate; // 4 bytes
@@ -87,89 +92,95 @@ struct fmt *unpack_fmt(FILE *fp)
 {
 	size_t ret;
 	struct fmt *subchunk = malloc(sizeof(struct fmt));
-
 	if (subchunk == NULL) {
-		perror("Could not allocate memory.\n");
-		exit(1);
+		fprintf(stderr, "Could not allocate memory.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	// Read chunkID
 	ret = fread(subchunk->id, 1, 4, fp);
 	if (ret != 4) {
 		fprintf(stderr, "Error reading: %zu\n", ret);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	if (strncmp((const char *)subchunk->id, "fmt ", 4) != 0) {
-		perror("Invalid WAV. No `fmt` subchunk id.\n");
-		exit(1);
+		errno = EPERM;
+		fprintf(stderr, "Invalid WAV. No `fmt` subchunk id.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	ret = fread(&subchunk->size, 4, 1, fp);
 	if (ret != 1) {
-		perror("Error reading subchunk size in subchunk `fmt`.\n");
-		exit(1);
+		fprintf(stderr,
+			"Error reading subchunk size in subchunk `fmt`.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	if (subchunk->size + 8 != FMT_CHUNKSIZE) {
 		fprintf(stderr, "Invalid subchunk size: %i\n", subchunk->size);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	ret = fread(&subchunk->fmt, 2, 1, fp);
 	if (ret != 1) {
-		perror("Error reading audio format in `fmt` subchunk.\n");
-		exit(1);
+		fprintf(stderr,
+			"Error reading audio format in `fmt` subchunk.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	if (subchunk->fmt != WAVE_FORMAT_PCM &&
 	    subchunk->fmt != WAVE_FORMAT_IEEE_FLOAT) {
 		fprintf(stderr, "Unsupported audio format: %i\n",
 			subchunk->fmt);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	ret = fread(&subchunk->nchannels, 2, 1, fp);
 	if (ret != 1) {
-		perror("Error reading number of channels in `fmt` subchunk.\n");
-		exit(1);
+		fprintf(stderr,
+			"Error reading number of channels in `fmt` subchunk.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	if (subchunk->nchannels != MONO && subchunk->nchannels != STEREO) {
 		fprintf(stderr, "Invalid number of audio channels: %i.\n",
 			subchunk->nchannels);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	ret = fread(&subchunk->sample_rate, 4, 1, fp);
 	if (ret != 1) {
-		perror("Error reading sample rate in `fmt` subchunk.\n");
-		exit(1);
+		fprintf(stderr,
+			"Error reading sample rate in `fmt` subchunk.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	ret = fread(&subchunk->byte_rate, 4, 1, fp);
 	if (ret != 1) {
-		perror("Error reading byte rate in `fmt` subchunk.\n");
-		exit(1);
+		fprintf(stderr, "Error reading byte rate in `fmt` subchunk.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	ret = fread(&subchunk->blk_align, 2, 1, fp);
 	if (ret != 1) {
-		perror("Error reading block align in `fmt` subchunk.\n");
-		exit(1);
+		fprintf(stderr,
+			"Error reading block align in `fmt` subchunk.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	ret = fread(&subchunk->bits_per_sample, 2, 1, fp);
 	if (ret != 1) {
-		perror("Error reading bits per sample in `fmt` subchunk.\n");
-		exit(1);
+		fprintf(stderr,
+			"Error reading bits per sample in `fmt` subchunk.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	if (subchunk->byte_rate * 8 !=
 	    (subchunk->bits_per_sample * subchunk->nchannels *
 	     subchunk->sample_rate)) {
 		fprintf(stderr, "Invalid Byte Rate: %i\n", subchunk->byte_rate);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	if (subchunk->blk_align * 8 !=
@@ -192,41 +203,44 @@ struct data *unpack_data(FILE *fp)
 {
 	struct data *subchunk = malloc(sizeof(struct data));
 	if (subchunk == NULL) {
-		perror("Could not allocate memory in `data` subchunk.\n");
-		exit(1);
+		fprintf(stderr,
+			"Could not allocate memory in `data` subchunk.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	size_t ret = fread(subchunk->id, 1, 4, fp);
 	if (ret != 4) {
-		perror("Error reading subchunk id in `data` subchunk.\n");
-		exit(1);
+		fprintf(stderr,
+			"Error reading subchunk id in `data` subchunk.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	if (strncmp((const char *)subchunk->id, "data", 4) != 0) {
-		perror("Invalid WAV. No `data` subchunk.\n");
-		exit(1);
+		fprintf(stderr, "Invalid WAV. No `data` subchunk.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	ret = fread(&subchunk->size, 4, 1, fp);
 	if (ret != 1) {
-		perror("Error reading subchunk size in `data` subchunk.\n");
-		exit(1);
+		fprintf(stderr,
+			"Error reading subchunk size in `data` subchunk.\n");
+		exit(EXIT_FAILURE);
 	}
 
 	if (subchunk->size < 1) {
 		fprintf(stderr, "Invalid size: %i\n", subchunk->size);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	subchunk->stream = malloc(sizeof(unsigned char) * subchunk->size);
 	if (subchunk->stream == NULL) {
-		perror("Could not allocate memory for data stream.\n");
-		exit(1);
+		fprintf(stderr, "Could not allocate memory for data stream.\n");
+		exit(EXIT_FAILURE);
 	}
 	ret = fread(subchunk->stream, 1, subchunk->size, fp);
 	if (ret != subchunk->size) {
-		perror("Error reading stream in `data` subchunk\n");
-		exit(1);
+		fprintf(stderr, "Error reading stream in `data` subchunk\n");
+		exit(EXIT_FAILURE);
 	}
 
 	return subchunk;
@@ -239,13 +253,20 @@ int main(int argc, char **argv)
 
 	FILE *fp = fopen(argv[1], "rb");
 	if (fp == NULL) {
-		perror("Could not open file\n");
+		fprintf(stderr, "Could not open file\n");
 		return 1;
 	}
 
+	// Unpacking WAV file in order
 	struct descriptor *chunk = unpack_desc(fp);
 	struct fmt *subchunk1 = unpack_fmt(fp);
 	struct data *subchunk2 = unpack_data(fp);
+
+	if (subchunk2->size % subchunk1->blk_align != 0) {
+		fprintf(stderr,
+			"Data chunk length is not a multiple of block align.\n");
+		return 1;
+	}
 
 	free(chunk);
 	free(subchunk1);
